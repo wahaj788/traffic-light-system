@@ -175,10 +175,6 @@ functionality.
 #include "../FreeRTOS_Source/include/timers.h"
 
 
-
-
-
-
 /*-----------------------------------------------------------*/
 //traffic light defines
 #define red     0
@@ -188,10 +184,8 @@ functionality.
 
 static void prvSetupHardware( void );
 
-
 //helper function which performs an ADC conversion and returns the result via pointer to int
 void myADC_Convert(int *adc_val);
-
 
 //task functions
 static void Traffic_Flow_Adjustment_Task( void *pvParameters );
@@ -199,14 +193,11 @@ static void Traffic_Generator_Task( void *pvParameters );
 static void Traffic_Light_State_Task( void *pvParameters );
 static void System_Display_Task( void *pvParameters );
 
-
 //software timer callback
 static void Traffic_Light_Timer_Callback (TimerHandle_t xTimer);
 
-
 //software timer used to control light state transitions
 TimerHandle_t light_timer = NULL;
-
 
 //queue handles
 xQueueHandle timer_done_handle = 0;
@@ -216,12 +207,12 @@ xQueueHandle incoming_car_handle = 0;
 xQueueHandle traffic_flow_handle_lightstate = 0;
 /*-----------------------------------------------------------*/
 
-
 //Function: enableClock, which enables clocks for GPIOC and ADC1
 void enableClock() {
     RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOC, ENABLE);
     RCC_APB2PeriphClockCmd(RCC_APB2Periph_ADC1, ENABLE);
 }
+
 //Function: myGPIO_Init(), which configures the appropriate GPIO pins
 void myGPIO_Init() {
     GPIO_InitTypeDef GPIO_InitStruct;
@@ -232,12 +223,9 @@ void myGPIO_Init() {
     GPIO_InitStruct.GPIO_Mode = GPIO_Mode_OUT;
     GPIO_InitStruct.GPIO_Speed = GPIO_Speed_50MHz;
     GPIO_InitStruct.GPIO_OType = GPIO_OType_PP;
-
-
     //apply configuration
     GPIO_Init(GPIOC, &GPIO_InitStruct);
 }
-
 
 //Function: myGPIO_Pot_Init, which configures GPIOC pin 3 as analog input for potentiometer
 void myGPIO_Pot_Init() {
@@ -250,6 +238,7 @@ void myGPIO_Pot_Init() {
     //apply configuration
     GPIO_Init(GPIOC, &GPIO_InitStruct);
 }
+
 //Function: myADC_Init, which initializes ADC1 for conversions
 void myADC_Init() {
         ADC_InitTypeDef ADC_InitStruct;
@@ -268,11 +257,7 @@ void myADC_Init() {
         ADC_RegularChannelConfig(ADC1, ADC_Channel_13, 1, ADC_SampleTime_3Cycles);
 }
 
-
-
-
-int main(void)
-{
+int main(void) {
     //enable clocks
     enableClock();
     prvSetupHardware();
@@ -281,12 +266,7 @@ int main(void)
     myGPIO_Pot_Init();
     myADC_Init();
 
-
     //QUEUES:
-    /* Create the queue used by the queue send and queue receive tasks and add to the registry, for the benefit of kernel aware debugging.
-    http://www.freertos.org/a00116.html */
-
-
     //timer expiry queue
     timer_done_handle = xQueueCreate(1, sizeof(int));
     //queue to hold the current colour of the traffic light
@@ -298,7 +278,6 @@ int main(void)
     //queue to hold current traffic flow value to be used in the light state task
     traffic_flow_handle_lightstate = xQueueCreate (1, sizeof(int));
 
-
     //register queues for debugging
     vQueueAddToRegistry (traffic_light_state_handle, "Traffic Light State");
     vQueueAddToRegistry (traffic_flow_handle_generator, "Traffic Flow for Traffic Generator");
@@ -306,18 +285,15 @@ int main(void)
     vQueueAddToRegistry (timer_done_handle, "timer done");
     vQueueAddToRegistry (traffic_flow_handle_lightstate, "Traffic Flow for Light State");
 
-
     //TASKS:
     xTaskCreate (Traffic_Flow_Adjustment_Task, "Traffic Flow Adjustment Task", configMINIMAL_STACK_SIZE, NULL, 2, NULL);
     xTaskCreate (Traffic_Generator_Task, "Traffic Generator Task", configMINIMAL_STACK_SIZE, NULL, 2, NULL);
     xTaskCreate (Traffic_Light_State_Task, "Traffic Light State Task", configMINIMAL_STACK_SIZE, NULL, 2, NULL);
     xTaskCreate (System_Display_Task, "System Display Task", configMINIMAL_STACK_SIZE, NULL, 3, NULL);
 
-
     //TIMER:
     //we initialize it as one-shot timer with 1000ms duration, but we will change that based on potentiometer/ADC value
     light_timer = xTimerCreate("Timer", pdMS_TO_TICKS(1000), pdFALSE, NULL, Traffic_Light_Timer_Callback);
-
 
     /* Start the tasks and timer running. */
     vTaskStartScheduler();
@@ -347,19 +323,13 @@ static void Traffic_Light_Timer_Callback (TimerHandle_t xTimer) {
     xQueueSend(timer_done_handle, &time_to_switch_colour, 500);
 }
 
-
-
-
 /*-----------------------------------------------------------*/
 
-
-static void Traffic_Flow_Adjustment_Task( void *pvParameters )
-{
+static void Traffic_Flow_Adjustment_Task( void *pvParameters ) {
     int adc;
     while(1) {
             //read POT value and store result in int
             myADC_Convert(&adc);
-
 
             //convert ADC value (0-4095) to percentage
             int percent = (int)(adc * 100) / 4095;
@@ -367,12 +337,10 @@ static void Traffic_Flow_Adjustment_Task( void *pvParameters )
             //some cars coming in
             percent += 20;
 
-
             //make sure it doesn't go over 100 (since we added 20)
             if (percent > 100) {
                 percent = 100;
             }
-
 
             //send traffic percentage to traffic_flow_handle_generator and
             //traffic_flow_handle_lightstate
@@ -381,10 +349,8 @@ static void Traffic_Flow_Adjustment_Task( void *pvParameters )
             vTaskDelay(500);
     }
 }
-/*-----------------------------------------------------------*/
-/*-----------------------------------------------------------*/
-static void Traffic_Generator_Task( void *pvParameters )
-{
+
+static void Traffic_Generator_Task( void *pvParameters ) {
     int percent;
     while(1) {
         //as default, assume no car is entering the intersection
@@ -406,51 +372,37 @@ static void Traffic_Generator_Task( void *pvParameters )
     }
 }
 
-
-/*-----------------------------------------------------------*/
-/*-----------------------------------------------------------*/
-
-
-static void Traffic_Light_State_Task( void *pvParameters )
-{
+static void Traffic_Light_State_Task( void *pvParameters ) {
     int colour = green;
     int arbitrary_value;
     int percent;
 
-
     int start = green;
-
 
     //this is where we initially start the timer
     xQueueSend(traffic_light_state_handle, &start, 500);
     xTimerChangePeriod(light_timer, pdMS_TO_TICKS(2000), 0);
     xTimerStart(light_timer, 0);
 
-
     //set max durations (in ms) for each light colour in the traffic light
     int green_max_duration = 12000;
     int yellow_duration = 3000; //will always stay constant
     int red_max_duration = 6000;
 
-
     int total_cycle_duration_max = green_max_duration + red_max_duration;
-
 
     while(1)
     {   //wait until we can consume from the timer_done_handle queue (which signals that
         //the timer has expired and we need to start it again)
         if(xQueueReceive(timer_done_handle, &arbitrary_value, 500)) {
 
-
             //once we reach here, timer_done_handle should be empty until next timer callback
             xQueueReceive(traffic_flow_handle_lightstate, &percent, 500);
-
 
             //compute current durations based on flow percent
             int new_percent = (percent - 20) * 100 /(100-20);
             int green_cur_duration = (total_cycle_duration_max/3) + (new_percent * total_cycle_duration_max)/300;
             int red_cur_duration =  total_cycle_duration_max - green_cur_duration;
-
 
             if(colour == red)
             {
@@ -458,8 +410,6 @@ static void Traffic_Light_State_Task( void *pvParameters )
                 xQueueSend(traffic_light_state_handle, &colour, 500);
                 xTimerChangePeriod(light_timer, pdMS_TO_TICKS(red_cur_duration), 0);
                 xTimerStart(light_timer, 0);
-
-
             }
             else if (colour == yellow) {
                 //using yellow duration, we change the period of the timer and start it again
@@ -486,24 +436,16 @@ static void Traffic_Light_State_Task( void *pvParameters )
     }
 }
 
-
-/*-----------------------------------------------------------*/
-/*-----------------------------------------------------------*/
-
-
-static void System_Display_Task( void *pvParameters )
-{
+static void System_Display_Task( void *pvParameters ) {
     int incoming_car;
     //represent car LEDs as array where 0 = no car (led off) and 1 = car present (led on)
     int cars[19] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
     int colour;
-
-
+    
     while(1)
     {
         //get current light colour
         xQueueReceive(traffic_light_state_handle, &colour, 0);
-
 
         //control traffic light LEDs
         if (colour == red) {
@@ -520,10 +462,8 @@ static void System_Display_Task( void *pvParameters )
             GPIO_ResetBits(GPIOC, GPIO_Pin_1);
         }
 
-
         //on incoming car event, we enter this if-statement
         if (xQueueReceive(incoming_car_handle, &incoming_car, 500)) {
-
 
             //display car position
             for (int idx = 18; idx >= 0; idx--) {
@@ -536,8 +476,6 @@ static void System_Display_Task( void *pvParameters )
                 GPIO_ResetBits(GPIOC,GPIO_Pin_7);
                 GPIO_SetBits(GPIOC,GPIO_Pin_7);
             }
-
-
             xQueuePeek(traffic_light_state_handle, &colour, 0);
             //move cars depending on light state
             if (colour == green) {
@@ -552,14 +490,12 @@ static void System_Display_Task( void *pvParameters )
                 //if red or yellow, we move cars normally after the stop line, but
                 //compress cars before the stop line
 
-
                 for(int idx = 18; idx > 8; idx--){
                     //indices 8 to 18 represent part of road past the stop line
                     //in this section of the road, cars can move forward regardless of light state
                     cars[idx] = cars[idx-1];
                     cars[idx-1] = 0;
                 }
-
 
                 for(int idx = 7; idx > 0; idx--){
                     //indices 0 to 7 represent part of the road before the stop line
@@ -573,16 +509,14 @@ static void System_Display_Task( void *pvParameters )
                     //if the current position is not empty, we don't allow a car to move forward from behind
                 }
             }
-
-
+            
             if (incoming_car == 1) {
                 //if new car arrives, place it a beginning of road (index 0 of array)
                 cars[0] = 1;
             } else {
                 //otherwise, do nothing
             }
-
-
+            
         }
         //reset shift register
         GPIO_SetBits(GPIOC, GPIO_Pin_8);
